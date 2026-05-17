@@ -10,7 +10,7 @@ import (
 	"github.com/AastikM/go-oms/internal/models"
 )
 
-// This is the in-memory version — also written to Redis and Postgres.
+// Position represents a client's position in a specific symbol.
 type Position struct {
 	ClientID    string
 	Symbol      string
@@ -172,10 +172,7 @@ func (m *Manager) GetDaySummary(clientID string) DaySummary {
 	return summary
 }
 
-// WEIGHTED AVERAGE COST:
-//
-//	If you bought 100 @ ₹2500 and now buy 50 @ ₹2600:
-//	new_avg = (2500*100 + 2600*50) / 150 = ₹2533.33
+// applyBuy updates the position and calculates the new weighted average cost.
 func (m *Manager) applyBuy(pos *Position, qty int64, price float64) {
 	if pos.Quantity < 0 {
 		// Covering a short position — calculate realized P&L on covered portion
@@ -202,13 +199,8 @@ func (m *Manager) applyBuy(pos *Position, qty int64, price float64) {
 	pos.UpdatedAt = time.Now()
 }
 
-// applyShortSell updates a position when the client sells shares.
-//
-// TWO CASES:
-//  1. Selling from existing long (closing/reducing position)
-//     → realize P&L = (sell_price - buy_avg) * sold_qty
-//  2. Selling short (no existing long, or selling more than held)
-//     → open a short position, track sell_avg
+// applyShortSell handles both reducing an existing long position (realizing P&L)
+// and opening a new short position (tracking average sell price).
 func (m *Manager) applyShortSell(pos *Position, qty int64, price float64, _ models.ProductType) {
 	if pos.Quantity > 0 {
 		// Selling from long position

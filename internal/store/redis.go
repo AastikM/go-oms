@@ -19,8 +19,6 @@ const (
 )
 
 // RedisStore is the shared state layer backed by Redis.
-// Multiple Go processes connecting to the same Redis instance
-// will all see the same order state, balances, and prices.
 type RedisStore struct {
 	client *redis.Client
 	ctx    context.Context
@@ -51,8 +49,7 @@ func NewRedisStore(addr string) (*RedisStore, error) {
 func (s *RedisStore) SaveOrder(order *models.Order) error {
 	key := fmt.Sprintf("order:%s", order.OrderID)
 
-	// Marshal the full order as JSON — simpler than individual HSET fields
-	// for this use case. For ultra-high-frequency, you'd use individual fields.
+	// Marshal the full order as JSON
 	data, err := json.Marshal(order)
 	if err != nil {
 		return fmt.Errorf("marshal order: %w", err)
@@ -123,7 +120,6 @@ func (s *RedisStore) GetOrder(orderID string) (*models.Order, error) {
 }
 
 // GetOrdersByClient returns all orders for a given client.
-// Useful for "My Orders" screen in a trading app.
 func (s *RedisStore) GetOrdersByClient(clientID string) ([]*models.Order, error) {
 	ids, err := s.client.SMembers(s.ctx,
 		fmt.Sprintf("orders:client:%s", clientID)).Result()
@@ -134,7 +130,6 @@ func (s *RedisStore) GetOrdersByClient(clientID string) ([]*models.Order, error)
 }
 
 // GetOrdersByStatus returns all orders with a given status.
-// Useful for "get all open orders" to re-populate the order book on restart.
 func (s *RedisStore) GetOrdersByStatus(status models.OrderStatus) ([]*models.Order, error) {
 	ids, err := s.client.SMembers(s.ctx,
 		fmt.Sprintf("orders:status:%s", status)).Result()
@@ -144,9 +139,7 @@ func (s *RedisStore) GetOrdersByStatus(status models.OrderStatus) ([]*models.Ord
 	return s.batchGetOrders(ids)
 }
 
-// batchGetOrders fetches multiple orders using a pipeline (single round trip).
-// Without pipeline: N orders = N round trips to Redis.
-// With pipeline: N orders = 1 round trip. Huge difference at scale.
+// batchGetOrders fetches multiple orders in a single Redis pipeline to minimize network round trips.
 func (s *RedisStore) batchGetOrders(ids []string) ([]*models.Order, error) {
 	if len(ids) == 0 {
 		return nil, nil
@@ -206,7 +199,6 @@ func (s *RedisStore) BlockMargin(clientID string, amount float64) error {
 	usedKey := fmt.Sprintf("account:%s:used", clientID)
 
 	// Use a Lua script for atomic check-and-increment
-	// Lua scripts in Redis execute atomically — no other command runs between lines
 	script := redis.NewScript(`
 		local balance = tonumber(redis.call('GET', KEYS[1]))
 		local used    = tonumber(redis.call('GET', KEYS[2]))
@@ -393,8 +385,7 @@ func (s *RedisStore) RemoveGTT(gttID, symbol, condition string) error {
 	return err
 }
 
-// We only get IDs that actually triggered, not all GTTs. At 100,000 GTTs with 5 firing: we do 1 Redis call,
-// not 100,000 comparisons.
+// GetTriggeredGTTs queries the sorted set to find only the GTTs that have crossed the LTP, avoiding a full scan.
 func (s *RedisStore) GetTriggeredGTTs(symbol string, ltp float64) ([]string, error) {
 	var triggered []string
 

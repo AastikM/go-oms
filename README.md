@@ -62,21 +62,16 @@ go test ./tests/unit/... -v
 python3 tests/test_oms.py --mode integration
 ```
 
-## Architecture notes
+## Architecture
 
-The matching engine runs in-memory because Redis round-trips would be the bottleneck during peak load. Order state is kept in Redis so the in-memory book can be rebuilt after a crash. Margin reservation uses a Redis Lua script for atomic check-and-deduct, preventing double-spend across concurrent orders.
-
+- The matching engine runs in-memory for high throughput.
+- Order state is kept in Redis for crash recovery.
+- Margin reservation uses a Redis Lua script for atomic check-and-deduct.
 
 ## Known Limitations
-
-This is a learning project. Things missing from a production system:
 
 - No authentication (any client_id accepted)
 - MIS orders not auto squared-off at 3:20 PM
 - FIX protocol not implemented (exchange is simulated)
 - No Prometheus metrics or distributed tracing
 - Async Postgres write has a small durability window
-
-## Status
-
-This is a learning project. Production gaps include: authentication, FIX protocol integration, MIS auto square-off at 3:20 PM, and observability (Prometheus, distributed tracing).

@@ -1,9 +1,6 @@
-// Real brokers run these checks in <1ms because they're all in-memory.
-// These checks protect the broker from:
-//  1. Users over-extending their buying power (margin checks)
-//  2. Fat-finger errors (quantity/price sanity checks)
-//  3. SEBI-mandated position limits
-//  4. Exchange price band violations
+// Package risk performs in-memory pre-trade validations including margin
+// requirements, quantity/price sanity checks, position limits, and exchange 
+// price band validations.
 package risk
 
 import (
@@ -15,9 +12,9 @@ import (
 )
 
 var marginRates = map[models.ProductType]float64{
-	models.CNC:  1.00, // 100% — full value required
-	models.MIS:  0.20, // 20% — 5x intraday leverage
-	models.NRML: 0.15, // 15% — for F&O overnight
+	models.CNC:  1.00, // Full value required
+	models.MIS:  0.20, // Intraday leverage
+	models.NRML: 0.15, // F&O overnight
 }
 
 // priceBandPercent: max % deviation from LTP allowed in an order.
@@ -31,7 +28,7 @@ const freezeQuantity = int64(500000) // 5 lakh shares
 // minOrderValue: minimum order value (broker-level check)
 const minOrderValue = float64(1.0)
 
-// In production this lives in Redis (fast reads) + PostgreSQL (source of truth).
+// Account represents a client's margin balance.
 type Account struct {
 	ClientID  string
 	Balance   float64
@@ -133,7 +130,7 @@ func (e *Engine) validateBasics(order *models.Order) error {
 	return nil
 }
 
-// NSE rejects any order priced more than ±20% from the LTP.
+// validatePriceBand ensures the order price falls within the exchange's allowed deviation from LTP.
 
 func (e *Engine) validatePriceBand(order *models.Order, ltp float64) error {
 	if ltp <= 0 {
