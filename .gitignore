@@ -1,0 +1,23 @@
+# Binaries
+*.exe
+*.test
+*.out
+oms-server
+/tmp/
+
+# Mac
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Env / secrets
+.env
+*.local
+
+# Postgres data
+postgres_data/
+redis_data/
+
+
