@@ -1,0 +1,96 @@
+version: "3.9"
+
+# Full OMS Stack ─
+#
+# Start everything:
+#   docker compose up --build
+#
+# Start just the infrastructure (Redis + Postgres), run Go locally:
+#   docker compose up redis postgres
+#   go run cmd/server/main.go --sim=true
+#
+# Run the Python test suite:
+#   docker compose up --build
+#   pip install requests yfinance websocket-client
+#   python3 tests/test_oms.py --mode integration
+#   python3 tests/ws_client.py --mode demo
+#
+# Services ─
+
+services:
+
+  # Go OMS Server 
+  oms:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      REDIS_ADDR:  redis:6379
+      PG_HOST:     postgres
+      PG_PORT:     5432
+      PG_USER:     oms_user
+      PG_PASS:     oms_pass
+      PG_DB:       oms_db
+      SIM_MODE:    "true"
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: >
+      redis-server
+        --save 60 1
+        --loglevel warning
+        --maxmemory 256mb
+        --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # PostgreSQL
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER:     oms_user
+      POSTGRES_PASSWORD: oms_pass
+      POSTGRES_DB:       oms_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Auto apply schema on first start
+      - ./migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U oms_user -d oms_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Redis Commander (optional UI for Redis)
+  redis-ui:
+    image: rediscommander/redis-commander:latest
+    ports:
+      - "8081:8081"
+    environment:
+      REDIS_HOSTS: local:redis:6379
+    depends_on:
+      - redis
+    profiles:
+      - tools   # only starts with: docker compose --profile tools up
+
+volumes:
+  redis_data:
+  postgres_data:
